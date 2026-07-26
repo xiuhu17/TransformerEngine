@@ -427,6 +427,20 @@ void nvte_dequantize(const NVTETensor input, NVTETensor output, cudaStream_t str
  */
 void nvte_mxfp4_fake_quantize(const NVTETensor input, NVTETensor output, cudaStream_t stream);
 
+/*! \brief Direct MXFP4 -> MXFP8 rowwise weight conversion (fixed-shift-6
+ *         TileKernels canonicalization; E4M3 payload bytes + UE8M0 scale
+ *         codes in the padded compact layout). Innermost dim must be /32.
+ */
+void nvte_mxfp4_direct_mxfp8_rowwise(const NVTETensor input, NVTETensor data, NVTETensor scales,
+                                     cudaStream_t stream);
+
+/*! \brief Direct MXFP4 -> FP8 128x128 blockwise weight conversion
+ *         (per-tile exponent folding; fp32 power-of-two tile scales in the
+ *         padded layout). Dimensions must be /128.
+ */
+void nvte_mxfp4_direct_blockwise(const NVTETensor input, NVTETensor data, NVTETensor scales,
+                                 cudaStream_t stream);
+
 /*! \brief Casts input grouped tensor from reduced to higher precision.
  *         In case of the MXFP8 dequantization, the dequantized values are stored to the rowwise
  *         data of the output tensor, regardless of whether the row- or columnwise scaling is used.

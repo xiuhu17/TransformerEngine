@@ -348,6 +348,8 @@ py::object nvfp4_quantize_with_amax(const at::Tensor &tensor, py::handle quantiz
 py::object dequantize(const py::handle &input, DType otype);
 
 at::Tensor mxfp4_fake_quantize(const at::Tensor &input);
+std::tuple<at::Tensor, at::Tensor> mxfp4_direct_mxfp8_rowwise(const at::Tensor &input);
+std::tuple<at::Tensor, at::Tensor> mxfp4_direct_blockwise(const at::Tensor &input);
 
 py::object group_quantize(const at::Tensor &tensor, py::handle quantizer, const size_t num_tensors,
                           std::optional<at::Tensor> first_dims, std::optional<at::Tensor> last_dims,

@@ -47,6 +47,7 @@ from ..distributed import (
 )
 from ..constants import dist_group_type
 from ..mxfp4_qat import mxfp4_fake_quantize
+from ..mxfp4_qat_direct import mxfp4_qat_direct_quantize, mxfp4_qat_direct_update_
 from ..cpp_extensions.gemm import _NUM_MAX_UB_STREAMS
 from ..quantized_tensor import QuantizedTensor, QuantizedTensorStorage, Quantizer
 from ..tensor.float8_tensor import Float8Quantizer, Float8CurrentScalingQuantizer
@@ -806,6 +807,7 @@ def quantize_weight(
         if FP8GlobalStateManager.is_fp8_enabled()
         else False
     )
+    _mxfp4_qat_direct = _mxfp4_qat_active and FP8GlobalStateManager.get_fp8_recipe().mxfp4_qat_direct_conversion()
     if _mxfp4_qat_active and workspace_dtype == torch.float16:
         raise NotImplementedError(
             "MXFP4 QAT does not support fp16 as the activation/dequantize dtype: "
@@ -852,6 +854,9 @@ def quantize_weight(
         if update_workspace:
             if tensor is None:
                 raise ValueError("tensor kwarg must be provided to update FP8 workspace")
+            if _mxfp4_qat_direct:
+                mxfp4_qat_direct_update_(tensor, workspace)
+                return workspace, None
             if _mxfp4_qat_active:
                 tensor = mxfp4_fake_quantize(tensor)
             if hasattr(workspace, "quantize_"):
@@ -863,6 +868,11 @@ def quantize_weight(
     # Cache miss — create new workspace
     if tensor is None or quantizer is None:
         raise ValueError("tensor and quantizer kwargs must be provided to construct FP8 workspace")
+    if _mxfp4_qat_direct:
+        out = mxfp4_qat_direct_quantize(tensor, quantizer)
+        if cache:
+            return out, out
+        return out, None
     if _mxfp4_qat_active:
         tensor = mxfp4_fake_quantize(tensor)
     if cache:

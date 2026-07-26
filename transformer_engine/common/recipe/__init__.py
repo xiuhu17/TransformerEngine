@@ -174,6 +174,11 @@ class Recipe:
             self, (MXFP4QATMXFP8BlockScaling, MXFP4QATFloat8BlockScaling)
         )
 
+    def mxfp4_qat_direct_conversion(self):
+        """Whether QAT weights use the direct MXFP4->FP8 converter (TileKernels
+        canonicalization, no bf16 bridge tensor) instead of the fake-quant bridge."""
+        return self.mxfp4_qat() and bool(getattr(self, "mxfp4_qat_direct", False))
+
 
 @dataclass(repr=False)
 class DelayedScaling(Recipe):
@@ -375,6 +380,7 @@ class MXFP8BlockScaling(Recipe):
     fp8_mha: bool = False
     backward_override: Optional[str] = os.getenv("NVTE_BACKWARD_OVERRIDE", None)
     mxfp4_qat_weights: bool = os.getenv("NVTE_MXFP4_QAT", "0") == "1"
+    mxfp4_qat_direct: bool = os.getenv("NVTE_MXFP4_QAT_DIRECT", "0") == "1"
 
     def __post_init__(self) -> None:
         assert self.fp8_format != Format.E5M2, "Pure E5M2 training is not supported."
@@ -445,6 +451,7 @@ class Float8BlockScaling(Recipe):
     fp8_mha: bool = False
     backward_override: Optional[str] = os.getenv("NVTE_BACKWARD_OVERRIDE", None)
     mxfp4_qat_weights: bool = os.getenv("NVTE_MXFP4_QAT", "0") == "1"
+    mxfp4_qat_direct: bool = os.getenv("NVTE_MXFP4_QAT_DIRECT", "0") == "1"
 
     def __post_init__(self) -> None:
         assert self.x_block_scaling_dim in [1, 2], "Only 1D or 2D blocks supported for x"

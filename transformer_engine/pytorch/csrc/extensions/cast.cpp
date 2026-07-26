@@ -574,6 +574,53 @@ at::Tensor mxfp4_fake_quantize(const at::Tensor &input) {
   return output;
 }
 
+static void check_direct_input(const at::Tensor &input, int mod) {
+  TORCH_CHECK(input.is_cuda(), "mxfp4 direct conversion: input must be a CUDA tensor.");
+  TORCH_CHECK(input.dim() == 2, "mxfp4 direct conversion: input must be 2D.");
+  TORCH_CHECK(input.size(1) % mod == 0, "mxfp4 direct conversion: inner dim must be divisible by ",
+              mod);
+}
+
+std::tuple<at::Tensor, at::Tensor> mxfp4_direct_mxfp8_rowwise(const at::Tensor &input) {
+  check_direct_input(input, 32);
+  const c10::cuda::CUDAGuard device_guard(input.device());
+  auto input_contiguous = input.contiguous();
+  if (reinterpret_cast<uintptr_t>(input_contiguous.data_ptr()) % 16 != 0) {
+    input_contiguous = input_contiguous.clone();
+  }
+  const int64_t rows = input.size(0), cols = input.size(1);
+  const int64_t bpr = cols / 32;
+  auto data = at::empty({rows, cols}, input.options().dtype(at::kByte));
+  auto scales = at::zeros({(rows + 127) / 128 * 128, (bpr + 3) / 4 * 4},
+                          input.options().dtype(at::kByte));
+  auto in_cpp = makeTransformerEngineTensor(input_contiguous);
+  auto data_cpp = makeTransformerEngineTensor(data);
+  auto scales_cpp = makeTransformerEngineTensor(scales);
+  nvte_mxfp4_direct_mxfp8_rowwise(in_cpp.data(), data_cpp.data(), scales_cpp.data(),
+                                  at::cuda::getCurrentCUDAStream());
+  return {data, scales};
+}
+
+std::tuple<at::Tensor, at::Tensor> mxfp4_direct_blockwise(const at::Tensor &input) {
+  check_direct_input(input, 128);
+  TORCH_CHECK(input.size(0) % 128 == 0, "mxfp4 direct blockwise: rows must be divisible by 128");
+  const c10::cuda::CUDAGuard device_guard(input.device());
+  auto input_contiguous = input.contiguous();
+  if (reinterpret_cast<uintptr_t>(input_contiguous.data_ptr()) % 16 != 0) {
+    input_contiguous = input_contiguous.clone();
+  }
+  const int64_t rows = input.size(0), cols = input.size(1);
+  const int64_t tm = rows / 128, tn = cols / 128;
+  auto data = at::empty({rows, cols}, input.options().dtype(at::kByte));
+  auto scales = at::zeros({tm, (tn + 3) / 4 * 4}, input.options().dtype(at::kFloat));
+  auto in_cpp = makeTransformerEngineTensor(input_contiguous);
+  auto data_cpp = makeTransformerEngineTensor(data);
+  auto scales_cpp = makeTransformerEngineTensor(scales);
+  nvte_mxfp4_direct_blockwise(in_cpp.data(), data_cpp.data(), scales_cpp.data(),
+                              at::cuda::getCurrentCUDAStream());
+  return {data, scales};
+}
+
 py::object dequantize(const py::handle &input, transformer_engine::DType otype) {
   init_extension();
 

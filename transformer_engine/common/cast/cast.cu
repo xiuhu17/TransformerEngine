@@ -16,6 +16,7 @@
 #include "../utils.cuh"
 #include "dispatch/dequantize.cuh"
 #include "dispatch/quantize.cuh"
+#include "mxfp4/direct_convert_mxfp4.cuh"
 #include "mxfp4/fake_quantize_mxfp4.cuh"
 #include "transformer_engine/transpose.h"
 
@@ -78,6 +79,71 @@ void nvte_mxfp4_fake_quantize(const NVTETensor input, NVTETensor output, cudaStr
         reinterpret_cast<fp32 *>(output_tensor.data.dptr), numel, stream);
   }
   NVTE_CHECK_CUDA(cudaGetLastError());
+}
+
+void nvte_mxfp4_direct_mxfp8_rowwise(const NVTETensor input, NVTETensor data, NVTETensor scales,
+                                     cudaStream_t stream) {
+  NVTE_API_CALL(nvte_mxfp4_direct_mxfp8_rowwise);
+  using namespace transformer_engine;
+  const auto &input_tensor = *convertNVTETensorCheck(input);
+  auto &data_tensor = *convertNVTETensorCheck(data);
+  auto &scales_tensor = *convertNVTETensorCheck(scales);
+  if (input_tensor.data.numel() == 0) return;
+  NVTE_CHECK(input_tensor.data.shape.size() == 2, "MXFP4 direct rowwise expects a 2D input.");
+  const size_t rows = input_tensor.data.shape[0], cols = input_tensor.data.shape[1];
+  NVTE_CHECK(cols % 32 == 0, "MXFP4 direct rowwise needs the innermost dim divisible by 32.");
+  NVTE_CHECK(data_tensor.data.dtype == DType::kByte && scales_tensor.data.dtype == DType::kByte,
+             "MXFP4 direct rowwise outputs must be uint8.");
+  const int scale_stride = static_cast<int>(scales_tensor.data.shape[1]);
+  switch (input_tensor.data.dtype) {
+    case DType::kBFloat16:
+      dispatch::mxfp4::direct_mxfp8_rowwise_launch<bf16>(
+          reinterpret_cast<const bf16 *>(input_tensor.data.dptr),
+          reinterpret_cast<uint8_t *>(data_tensor.data.dptr),
+          reinterpret_cast<uint8_t *>(scales_tensor.data.dptr), rows, cols, scale_stride, stream);
+      break;
+    case DType::kFloat32:
+      dispatch::mxfp4::direct_mxfp8_rowwise_launch<fp32>(
+          reinterpret_cast<const fp32 *>(input_tensor.data.dptr),
+          reinterpret_cast<uint8_t *>(data_tensor.data.dptr),
+          reinterpret_cast<uint8_t *>(scales_tensor.data.dptr), rows, cols, scale_stride, stream);
+      break;
+    default:
+      NVTE_ERROR("MXFP4 direct conversion supports BF16/FP32 inputs only.");
+  }
+}
+
+void nvte_mxfp4_direct_blockwise(const NVTETensor input, NVTETensor data, NVTETensor scales,
+                                 cudaStream_t stream) {
+  NVTE_API_CALL(nvte_mxfp4_direct_blockwise);
+  using namespace transformer_engine;
+  const auto &input_tensor = *convertNVTETensorCheck(input);
+  auto &data_tensor = *convertNVTETensorCheck(data);
+  auto &scales_tensor = *convertNVTETensorCheck(scales);
+  if (input_tensor.data.numel() == 0) return;
+  NVTE_CHECK(input_tensor.data.shape.size() == 2, "MXFP4 direct blockwise expects a 2D input.");
+  const size_t rows = input_tensor.data.shape[0], cols = input_tensor.data.shape[1];
+  NVTE_CHECK(rows % 128 == 0 && cols % 128 == 0,
+             "MXFP4 direct blockwise needs 128-divisible dimensions.");
+  NVTE_CHECK(scales_tensor.data.dtype == DType::kFloat32,
+             "MXFP4 direct blockwise scales must be fp32.");
+  const int scale_stride = static_cast<int>(scales_tensor.data.shape[1]);
+  switch (input_tensor.data.dtype) {
+    case DType::kBFloat16:
+      dispatch::mxfp4::direct_blockwise_launch<bf16>(
+          reinterpret_cast<const bf16 *>(input_tensor.data.dptr),
+          reinterpret_cast<uint8_t *>(data_tensor.data.dptr),
+          reinterpret_cast<float *>(scales_tensor.data.dptr), rows, cols, scale_stride, stream);
+      break;
+    case DType::kFloat32:
+      dispatch::mxfp4::direct_blockwise_launch<fp32>(
+          reinterpret_cast<const fp32 *>(input_tensor.data.dptr),
+          reinterpret_cast<uint8_t *>(data_tensor.data.dptr),
+          reinterpret_cast<float *>(scales_tensor.data.dptr), rows, cols, scale_stride, stream);
+      break;
+    default:
+      NVTE_ERROR("MXFP4 direct conversion supports BF16/FP32 inputs only.");
+  }
 }
 
 void nvte_dequantize(const NVTETensor input, NVTETensor output, cudaStream_t stream) {
