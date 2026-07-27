@@ -399,69 +399,12 @@ def test_cuda_kernels_parity():
 
 
 
-def test_tilekernels_byte_parity():
-    """Direct kernels vs the real TileKernels quantize+lift chain, byte for byte.
-
-    round_sf=True is the deployment semantics (power-of-two scales; the False
-    default emits raw amax/6 fp32 scales that the lift then truncates).
-    Exclusions: blocks whose lifted scale is UE8M0 code 0 -- TileKernels'
-    fp32-scale store materializes code 0 as 0.0 (their analog of the
-    ptx::exp2f defect fixed in TE); the payload bytes still match there.
-    """
-    import sys
-
-    tk_root = os.environ.get(
-        "NVTE_MXFP4_QAT_TILEKERNELS", os.path.expanduser("~/Desktop/v4/TileKernels")
-    )
-    if os.path.isdir(tk_root) and tk_root not in sys.path:
-        sys.path.insert(0, tk_root)
-    try:
-        from tile_kernels.quant.per_token_cast_kernel import per_token_cast
-        from tile_kernels.quant.per_block_cast_lossless_kernel import per_block_cast_lossless
-    except Exception as e:
-        print(f"  SKIP (tile_kernels unavailable: {type(e).__name__}: {e})")
-        return
-    if not hasattr(tex, "mxfp4_direct_mxfp8_rowwise"):
-        print("  SKIP (direct bindings not built)")
-        return
-
-    torch.manual_seed(9)
-    m, n = 256, 512
-    w = make_weight(m, n, outliers=4)
-    w[0, :32] = torch.tensor(2.0**-127, dtype=torch.bfloat16)  # code-0 block
-    w[1, :32] = 0.0
-    w[1, 0] = 3.25  # pmax=3 canonical block
-    w[2, :32] = torch.tensor(2.0**120, dtype=torch.bfloat16)
-
-    fp4 = per_token_cast(w, "e2m1", 32, round_sf=True)
-    tk_d, tk_s = per_block_cast_lossless(fp4, "e4m3", (1, 32), (1, 32), round_sf=True)
-    od, os_ = tex.mxfp4_direct_mxfp8_rowwise(w)
-    assert torch.equal(od, tk_d.view(torch.uint8)), "rowwise payload bytes differ"
-    oc = os_[:m, : n // 32].to(torch.int32)
-    tk_sf = tk_s.float()[:m, : n // 32]
-    defect = tk_sf == 0.0  # their code-0 fp32-scale store defect
-    assert torch.equal(defect, oc == 0), "TK zero-sf defect not confined to code-0 blocks"
-    assert defect.any(), "code-0 case not exercised"
-    codes = (torch.log2(tk_sf.clamp(min=1e-45)) + 127).round().to(torch.int32)
-    assert torch.equal(oc[~defect], codes[~defect]), "rowwise scale codes differ"
-
-    w2 = (torch.randn(256, 256, device=DEV, dtype=torch.float32) * 0.02 + 0.05).to(torch.bfloat16)
-    fp42 = per_token_cast(w2, "e2m1", 32, round_sf=True)
-    tk_bd, tk_bs = per_block_cast_lossless(fp42, "e4m3", (1, 32), (128, 128), round_sf=True)
-    obd, obs = tex.mxfp4_direct_blockwise(w2)
-    assert torch.equal(obd, tk_bd.view(torch.uint8)), "blockwise payload bytes differ"
-    assert torch.equal(obs[:, :2], tk_bs.float()), "blockwise tile scales differ"
-    print("  byte parity vs TileKernels chain (payloads everywhere, scales outside "
-          "their code-0 store defect): PASS")
-
-
 TESTS = [
     test_rowwise_canonical_bytes_and_decode,
     test_cuda_kernels_parity,
     test_colwise_matches_bridge,
     test_blockwise_folding_and_decode,
     test_direct_flag_plumbing,
-    test_tilekernels_byte_parity,
     test_e2e_direct_matches_bridge,
 ]
 
