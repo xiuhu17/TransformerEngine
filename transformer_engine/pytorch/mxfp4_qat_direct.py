@@ -60,9 +60,9 @@ def _mxfp8_columnwise_from_projection(weight: torch.Tensor):
     columnwise representation by construction.
     """
     what = mxfp4_fake_quantize(weight)
-    col = MXFP8Quantizer(
-        fp8_dtype=tex.DType.kFloat8E4M3, rowwise=False, columnwise=True
-    ).quantize(what)
+    col = MXFP8Quantizer(fp8_dtype=tex.DType.kFloat8E4M3, rowwise=False, columnwise=True).quantize(
+        what
+    )
     return col._columnwise_data, col._columnwise_scale_inv
 
 
@@ -79,15 +79,11 @@ def mxfp4_qat_direct_quantize(weight: torch.Tensor, quantizer) -> torch.Tensor:
         raise ValueError(f"inner dim must be divisible by {_MXFP4_BLOCK}, got {cols}")
 
     if isinstance(quantizer, MXFP8Quantizer):
-        data, scale_inv = _require_kernel("mxfp4_direct_mxfp8_rowwise")(
-            _prepare(weight)
-        )
+        data, scale_inv = _require_kernel("mxfp4_direct_mxfp8_rowwise")(_prepare(weight))
         col_data, col_scale_inv = None, None
         if quantizer.columnwise_usage:
             if rows % 32 != 0:
-                raise ValueError(
-                    f"columnwise 32x1 blocks need rows % 32 == 0, got {rows}"
-                )
+                raise ValueError(f"columnwise 32x1 blocks need rows % 32 == 0, got {rows}")
             col_data, col_scale_inv = _mxfp8_columnwise_from_projection(weight)
         return MXFP8Tensor(
             shape=weight.shape,
@@ -104,9 +100,7 @@ def mxfp4_qat_direct_quantize(weight: torch.Tensor, quantizer) -> torch.Tensor:
 
     if isinstance(quantizer, Float8BlockQuantizer):
         if getattr(quantizer, "block_scaling_dim", 2) != 2:
-            raise ValueError(
-                "direct blockwise conversion supports 128x128 (2D) scaling only"
-            )
+            raise ValueError("direct blockwise conversion supports 128x128 (2D) scaling only")
         data, scale_inv = _require_kernel("mxfp4_direct_blockwise")(_prepare(weight))
         out = Float8BlockwiseQTensor(
             shape=weight.shape,
