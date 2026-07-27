@@ -807,7 +807,9 @@ def quantize_weight(
         if FP8GlobalStateManager.is_fp8_enabled()
         else False
     )
-    _mxfp4_qat_direct = _mxfp4_qat_active and FP8GlobalStateManager.get_fp8_recipe().mxfp4_qat_direct_conversion()
+    _mxfp4_qat_direct = (
+        _mxfp4_qat_active and FP8GlobalStateManager.get_fp8_recipe().mxfp4_qat_direct_conversion()
+    )
     if _mxfp4_qat_active and workspace_dtype == torch.float16:
         raise NotImplementedError(
             "MXFP4 QAT does not support fp16 as the activation/dequantize dtype: "

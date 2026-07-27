@@ -145,8 +145,11 @@ def test_colwise_matches_bridge():
 def test_blockwise_folding_and_decode():
     def mk_quantizer():
         return Float8BlockQuantizer(
-            fp8_dtype=tex.DType.kFloat8E4M3, rowwise=True, columnwise=True,
-            force_pow_2_scales=True, block_scaling_dim=2,
+            fp8_dtype=tex.DType.kFloat8E4M3,
+            rowwise=True,
+            columnwise=True,
+            force_pow_2_scales=True,
+            block_scaling_dim=2,
         )
 
     # spread sweep: exact through d<=14, first loss at d=15 (E4M3 subnormal bound)
@@ -213,12 +216,12 @@ def test_e2e_direct_matches_bridge():
                     f"fwd differs (bridge vs direct) {recipe_cls.__name__} "
                     f"override={override} step={i}"
                 )
-            assert torch.equal(results[False][1], results[True][1]), (
-                f"dgrad differs {recipe_cls.__name__} override={override}"
-            )
-            assert torch.equal(results[False][2], results[True][2]), (
-                f"wgrad differs {recipe_cls.__name__} override={override}"
-            )
+            assert torch.equal(
+                results[False][1], results[True][1]
+            ), f"dgrad differs {recipe_cls.__name__} override={override}"
+            assert torch.equal(
+                results[False][2], results[True][2]
+            ), f"wgrad differs {recipe_cls.__name__} override={override}"
     print("  e2e direct == bridge (fwd/dgrad/wgrad bitwise, 2 recipes x 3 overrides): PASS")
 
 
@@ -233,7 +236,6 @@ def test_direct_flag_plumbing():
     base.mxfp4_qat_direct = True  # direct without QAT is inert
     assert not base.mxfp4_qat_direct_conversion()
     print("  recipe flag plumbing: PASS")
-
 
 
 def _edge_weight():
@@ -259,8 +261,13 @@ def _intree_direct(fast_math=False):
 
         src_dir = os.environ.get(
             "NVTE_MXFP4_QAT_TEST_SRC",
-            os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                         "..", "..", "transformer_engine", "common"),
+            os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+                "..",
+                "..",
+                "transformer_engine",
+                "common",
+            ),
         )
         cuda_src = r"""
 #include <cuda.h>
@@ -325,7 +332,8 @@ std::vector<torch::Tensor> direct_block(torch::Tensor w) {
                 "-U__CUDA_NO_HALF2_OPERATORS__",
                 "-U__CUDA_NO_BFLOAT16_OPERATORS__",
                 "-U__CUDA_NO_BFLOAT16_CONVERSIONS__",
-            ] + (["--use_fast_math"] if fast_math else []),
+            ]
+            + (["--use_fast_math"] if fast_math else []),
             verbose=False,
         )
     return _DIRECT_KERNELS[fast_math]
@@ -341,9 +349,9 @@ def test_cuda_kernels_parity():
                 w = make_weight(m, n, dtype=dtype, zero_blocks=2, outliers=2)
                 dd, ds = k.direct_row(w.contiguous())
                 td, ts = _direct_mxfp8_rowwise(*_mxfp4_decompose(w), m, n)
-                assert torch.equal(dd, td) and torch.equal(ds, ts), (
-                    f"cuda row {tag} differs {m}x{n} {dtype}"
-                )
+                assert torch.equal(dd, td) and torch.equal(
+                    ds, ts
+                ), f"cuda row {tag} differs {m}x{n} {dtype}"
         wx = _edge_weight()
         dd, ds = k.direct_row(wx.contiguous())
         td, ts = _direct_mxfp8_rowwise(*_mxfp4_decompose(wx), 128, 256)
@@ -354,9 +362,9 @@ def test_cuda_kernels_parity():
                 w = make_weight(m, n, dtype=dtype, zero_blocks=3, outliers=3)
                 dd, ds = k.direct_block(w.contiguous())
                 td, ts = _direct_blockwise_128(*_mxfp4_decompose(w), m, n)
-                assert torch.equal(dd, td) and torch.equal(ds, ts), (
-                    f"cuda blockwise {tag} differs {m}x{n} {dtype}"
-                )
+                assert torch.equal(dd, td) and torch.equal(
+                    ds, ts
+                ), f"cuda blockwise {tag} differs {m}x{n} {dtype}"
         payloads = torch.tensor([0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0])
         for d in (0, 11, 14, 15):
             w = torch.zeros(128, 128, dtype=torch.float32, device=DEV)
@@ -396,7 +404,6 @@ def test_cuda_kernels_parity():
             f"blockwise: {t_blk:.1f} us"
         )
     print("  cuda kernels (normal + fast-math): PASS")
-
 
 
 TESTS = [

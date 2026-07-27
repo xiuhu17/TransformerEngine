@@ -41,13 +41,13 @@ namespace dispatch {
 namespace mxfp4 {
 namespace direct_convert_kernel {
 
-using fake_quantize_kernel::E2M1_MAX;
-using fake_quantize_kernel::MXFP4_BLOCK_SIZE;
-using fake_quantize_kernel::THREADS_PER_CHUNK;
 using fake_quantize_kernel::block_scale_exponent_from_bits;
+using fake_quantize_kernel::E2M1_MAX;
 using fake_quantize_kernel::exp2_from_int;
 using fake_quantize_kernel::mul_rn_no_ftz;
+using fake_quantize_kernel::MXFP4_BLOCK_SIZE;
 using fake_quantize_kernel::round_e2m1_magnitude;
+using fake_quantize_kernel::THREADS_PER_CHUNK;
 
 // 2^k as fp32 for k in [-149, 127]: normal via exponent field, subnormal via
 // mantissa bit, exact zero below the subnormal range. Integer construction.
@@ -104,13 +104,13 @@ __global__ void __launch_bounds__(THREADS_PER_CHUNK)
     int amax_bits = 0;
 #pragma unroll
     for (int i = 0; i < static_cast<int>(VEC_ELTS); ++i) {
-      amax_bits = max(amax_bits, __float_as_int(static_cast<float>(in_vec.data.elt[i])) & 0x7fffffff);
+      amax_bits =
+          max(amax_bits, __float_as_int(static_cast<float>(in_vec.data.elt[i])) & 0x7fffffff);
     }
     const unsigned lane = threadIdx.x & 31u;
-    const unsigned group_mask =
-        (LANES_PER_BLOCK == 32)
-            ? 0xffffffffu
-            : (((1u << LANES_PER_BLOCK) - 1u) << (lane & ~(LANES_PER_BLOCK - 1u)));
+    const unsigned group_mask = (LANES_PER_BLOCK == 32) ? 0xffffffffu
+                                                        : (((1u << LANES_PER_BLOCK) - 1u)
+                                                           << (lane & ~(LANES_PER_BLOCK - 1u)));
 #pragma unroll
     for (int offset = LANES_PER_BLOCK / 2; offset > 0; offset >>= 1) {
       amax_bits = max(amax_bits, __shfl_xor_sync(group_mask, amax_bits, offset));
@@ -134,8 +134,7 @@ __global__ void __launch_bounds__(THREADS_PER_CHUNK)
     } else {
 #pragma unroll
       for (int i = 0; i < static_cast<int>(VEC_ELTS); i += 2) {
-        store_e4m3_pair(&out_vec.data.elt[i],
-                        direct_payload(in_vec.data.elt[i], inv_scale, pscale),
+        store_e4m3_pair(&out_vec.data.elt[i], direct_payload(in_vec.data.elt[i], inv_scale, pscale),
                         direct_payload(in_vec.data.elt[i + 1], inv_scale, pscale));
       }
     }
@@ -159,8 +158,7 @@ __global__ void __launch_bounds__(THREADS_PER_CHUNK)
 template <typename IType>
 __global__ void __launch_bounds__(512)
     direct_blockwise_kernel(const IType *__restrict__ input, uint8_t *__restrict__ data,
-                            float *__restrict__ scales, const size_t cols,
-                            const int scale_stride) {
+                            float *__restrict__ scales, const size_t cols, const int scale_stride) {
   constexpr int BLOCKS_PER_TILE_ROW = 128 / MXFP4_BLOCK_SIZE;  // 4
 
   const int t = threadIdx.x;
@@ -244,8 +242,7 @@ void direct_blockwise_launch(const IType *input, uint8_t *data, float *scales, c
                              const size_t cols, const int scale_stride, cudaStream_t stream) {
   using namespace direct_convert_kernel;
   const dim3 grid(static_cast<unsigned>(cols / 128), static_cast<unsigned>(rows / 128));
-  direct_blockwise_kernel<IType><<<grid, 512, 0, stream>>>(input, data, scales, cols,
-                                                           scale_stride);
+  direct_blockwise_kernel<IType><<<grid, 512, 0, stream>>>(input, data, scales, cols, scale_stride);
 }
 
 }  // namespace mxfp4

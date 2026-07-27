@@ -203,11 +203,11 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
         "Project a BF16/FP32 tensor onto the MXFP4 grid (QAT fake-quantization)", py::arg("input"),
         py::call_guard<py::gil_scoped_release>());
   m.def("mxfp4_direct_mxfp8_rowwise", &transformer_engine::pytorch::mxfp4_direct_mxfp8_rowwise,
-        "Direct MXFP4->MXFP8 rowwise conversion (fixed-shift-6 canonicalization)",
-        py::arg("input"), py::call_guard<py::gil_scoped_release>());
+        "Direct MXFP4->MXFP8 rowwise conversion (fixed-shift-6 canonicalization)", py::arg("input"),
+        py::call_guard<py::gil_scoped_release>());
   m.def("mxfp4_direct_blockwise", &transformer_engine::pytorch::mxfp4_direct_blockwise,
-        "Direct MXFP4->FP8 128x128 blockwise conversion (exponent folding)",
-        py::arg("input"), py::call_guard<py::gil_scoped_release>());
+        "Direct MXFP4->FP8 128x128 blockwise conversion (exponent folding)", py::arg("input"),
+        py::call_guard<py::gil_scoped_release>());
   m.def("dequantize", &transformer_engine::pytorch::dequantize, "Dequantize", py::arg("input"),
         py::arg("otype"));
   m.def("create_empty_quantized_tensor",

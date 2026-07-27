@@ -591,8 +591,8 @@ std::tuple<at::Tensor, at::Tensor> mxfp4_direct_mxfp8_rowwise(const at::Tensor &
   const int64_t rows = input.size(0), cols = input.size(1);
   const int64_t bpr = cols / 32;
   auto data = at::empty({rows, cols}, input.options().dtype(at::kByte));
-  auto scales = at::zeros({(rows + 127) / 128 * 128, (bpr + 3) / 4 * 4},
-                          input.options().dtype(at::kByte));
+  auto scales =
+      at::zeros({(rows + 127) / 128 * 128, (bpr + 3) / 4 * 4}, input.options().dtype(at::kByte));
   auto in_cpp = makeTransformerEngineTensor(input_contiguous);
   auto data_cpp = makeTransformerEngineTensor(data);
   auto scales_cpp = makeTransformerEngineTensor(scales);

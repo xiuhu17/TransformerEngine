@@ -78,9 +78,9 @@ def _direct_mxfp8_rowwise(e, q, nonfinite, rows, cols):
     shift = torch.where(biased >= 0, torch.full_like(e, 6), e + 127)
     payload_vals = q * torch.ldexp(ones, shift)
     data = _encode_e4m3(payload_vals)
-    data = torch.where(
-        nonfinite.expand_as(data), torch.full_like(data, _E4M3_NAN), data
-    ).view(rows, cols)
+    data = torch.where(nonfinite.expand_as(data), torch.full_like(data, _E4M3_NAN), data).view(
+        rows, cols
+    )
     code = torch.where(nonfinite, torch.full_like(code, 127), code)
 
     scale_inv = torch.zeros(
@@ -160,17 +160,15 @@ def _direct_blockwise_128(e, q, nonfinite, rows, cols):
     fold = (e_t - s_exp).view(rows, cols // _MXFP4_BLOCK, 1).to(torch.float32)
     payload_vals = q * torch.ldexp(torch.ones_like(fold), fold.to(torch.int32))
     data = _encode_e4m3(payload_vals)
-    data = torch.where(
-        nonfinite.expand_as(data), torch.full_like(data, _E4M3_NAN), data
-    ).view(rows, cols)
+    data = torch.where(nonfinite.expand_as(data), torch.full_like(data, _E4M3_NAN), data).view(
+        rows, cols
+    )
 
     s_exp2 = s_exp.view(tiles_m, tiles_n)
     scale_inv = torch.zeros(
         (tiles_m, _roundup(tiles_n, 4)), dtype=torch.float32, device=data.device
     )
-    scale_inv[:, :tiles_n] = torch.ldexp(
-        torch.ones_like(s_exp2, dtype=torch.float32), s_exp2
-    )
+    scale_inv[:, :tiles_n] = torch.ldexp(torch.ones_like(s_exp2, dtype=torch.float32), s_exp2)
     return data, scale_inv
 
 
