@@ -122,24 +122,42 @@ def test_rowwise_canonical_bytes_and_decode():
 
 
 def test_colwise_matches_bridge():
+    """Direct-mode columnwise buffers must be the bridge path's, byte for byte.
+
+    ``optimize_for_gemm`` is what the modules set on an MXFP8 weight quantizer
+    (base.py::_enable_weight_preswizzle returns True for every MXFP8 weight that
+    MXFP4 QAT accepts), and it decides which cast kernel runs: with it off the
+    rowwise/bidimensional cases take a specialized fused kernel that rewrites -0
+    payloads as +0. Comparing against a quantizer without it would test a kernel
+    no QAT run ever uses, and would report a -0 mismatch that does not exist in
+    production, so pin the production configuration here.
+    """
     m, n = 128, 256
     w = make_weight(m, n, zero_blocks=4, outliers=4)
+    # plant negative zeros, whose payload sign is exactly what the two kernels
+    # disagree about
+    w[0, :32] = torch.tensor(-0.0, dtype=w.dtype)
+    w[:, 64] = torch.tensor(-0.0, dtype=w.dtype)
     what = mxfp4_fake_quantize(w)
 
     qd = MXFP8Quantizer(fp8_dtype=tex.DType.kFloat8E4M3, rowwise=True, columnwise=True)
+    qd.optimize_for_gemm = True
     dt = mxfp4_qat_direct_quantize(w, qd)
     qb = MXFP8Quantizer(fp8_dtype=tex.DType.kFloat8E4M3, rowwise=True, columnwise=True)
+    qb.optimize_for_gemm = True
     bt = qb.quantize(what)
 
+    assert bool(dt._with_gemm_swizzled_scales) == bool(
+        bt._with_gemm_swizzled_scales
+    ), "direct and bridge disagree on whether scales are GEMM-swizzled"
     dcol = dt._columnwise_data.view(torch.uint8)
     bcol = bt._columnwise_data.view(torch.uint8)
     assert torch.equal(dcol, bcol), "columnwise payload bytes differ from bridge"
-    dsc = dt._columnwise_scale_inv.view(torch.uint8)[: m // 32, :n]
-    bsc = bt._columnwise_scale_inv.view(torch.uint8)[: m // 32, :n]
-    # zero columns may legitimately carry different (unused) scale codes
-    nz = dcol.view(m // 32, 32, n).ne(0).any(dim=1)
-    assert torch.equal(dsc[nz], bsc[nz]), "columnwise scale codes differ from bridge"
-    print("  colwise bytes == bridge: PASS")
+    assert int((dcol == 0x80).sum()) > 0, "corpus planted no -0 payloads"
+    assert torch.equal(
+        dt._columnwise_scale_inv.view(torch.uint8), bt._columnwise_scale_inv.view(torch.uint8)
+    ), "columnwise scale bytes differ from bridge"
+    print("  colwise bytes == bridge (production preswizzle config): PASS")
 
 
 def test_blockwise_folding_and_decode():

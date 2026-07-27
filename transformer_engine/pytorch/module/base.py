@@ -857,7 +857,7 @@ def quantize_weight(
             if tensor is None:
                 raise ValueError("tensor kwarg must be provided to update FP8 workspace")
             if _mxfp4_qat_direct:
-                mxfp4_qat_direct_update_(tensor, workspace)
+                mxfp4_qat_direct_update_(tensor, workspace, noop_flag=skip_update_flag)
                 return workspace, None
             if _mxfp4_qat_active:
                 tensor = mxfp4_fake_quantize(tensor)
